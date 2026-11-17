@@ -55,3 +55,10 @@ htmlcov/
 docs/
 
 .firecrawl/
+
+# --- Local-only scratch scripts: kept on this machine, not in the repo ---
+scripts/mem_test_clip.py
+scripts/test_service.py
+scripts/seed_mock.py
+scripts/download_motor_oil.py
+scripts/inspect_dataset.py
