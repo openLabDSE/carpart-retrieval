@@ -12,9 +12,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from .api.endpoints import router
+from .api.prototype import demo_page
+from .api.prototype import router as prototype_router
 from .config import settings
 
 # Configure logging
@@ -125,6 +127,10 @@ async def api_key_middleware(request: Request, call_next):
 
 # Include API routes
 app.include_router(router, prefix="/api/v1")
+
+# Part-type prototype for the garage owner (thesis demo): API plus a one-page demo
+app.include_router(prototype_router, prefix="/api/v1")
+app.add_api_route("/demo", demo_page, methods=["GET"], response_class=HTMLResponse, include_in_schema=False)
 
 
 @app.get("/")

@@ -151,6 +151,11 @@ def main():
             sc[(u["kind"], u["split"])].append(u)
             per[(u["split"], u["type"] if u["kind"] == "near" else "motorcycle")].append(u)
         S = {k: score(v) for k, v in sc.items()}
+        rows = [{"id": Path(r["image"]).stem, "kind": "known", "split": "", "type": r["part_id"], "score": float(s), "correct": float(c)}
+                for r, s, c in zip(known, s_known, correct)]
+        rows += [{"id": u["id"], "kind": u["kind"], "split": u["split"], "type": u["type"], "score": float(s), "correct": ""}
+                 for k, v in sc.items() for u, s in zip(v, S[k])]
+        pd.DataFrame(rows).to_csv(a.out / f"scores_a{alpha:.2f}.csv", index=False)  # one row per query, for per-type checks
         res = {"checkpoint": a.checkpoint, "alpha": alpha, "smoke": a.smoke, "far_target": FAR_TARGET,
                "gallery": len(gallery), "known_queries": len(known), "known_recall@1": round(float(correct.mean()), 4),
                "unknown_counts": {f"{k}_{s}": len(v) for (k, s), v in sc.items()}, "calibrations": {}}

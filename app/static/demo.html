@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Car Part Identifier (prototype)</title>
+<style>
+  :root { --bg:#fbfbf8; --ink:#14213d; --mute:#4a5568; --card:#eef0f4; --ok:#1f7a4d; --warn:#b4551d; --accent:#2f6fde; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14213d; --ink:#fbfbf8; --mute:#bfc8da; --card:#1f2f52; --ok:#5fd29a; --warn:#f0a35e; --accent:#7aa7ff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:18px/1.4 system-ui, Arial, sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:16px; }
+  h1 { font-size:26px; margin:8px 0 0; }
+  .sub { color:var(--mute); margin:0; font-size:16px; }
+  .card { background:var(--card); border-radius:16px; padding:16px; }
+  label.pick { display:block; text-align:center; padding:18px; border:2px dashed var(--accent); border-radius:16px; cursor:pointer; font-weight:600; }
+  input[type=file] { display:none; }
+  img#preview { width:100%; max-height:320px; object-fit:contain; border-radius:12px; display:none; background:#0001; }
+  select, button { font:inherit; padding:12px; border-radius:12px; border:1px solid var(--mute); background:var(--bg); color:var(--ink); width:100%; }
+  button { background:var(--accent); color:#fff; border:0; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  #result { display:none; }
+  .big { font-size:28px; font-weight:700; margin:0 0 4px; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); }
+  .bar { position:relative; height:14px; border-radius:7px; background:#0002; margin:10px 0 4px; }
+  .bar span { position:absolute; left:0; top:0; bottom:0; border-radius:7px; background:var(--accent); }
+  .bar i { position:absolute; top:-4px; bottom:-4px; width:3px; background:var(--ink); }
+  ul { margin:8px 0 0; padding-left:20px; }
+  .brand { border:2px dashed var(--mute); }
+  .small { font-size:14px; color:var(--mute); }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>Car Part Identifier</h1>
+    <p class="sub">Prototype: names the type of a part from a photo, or says it is not sure.</p>
+  </div>
+
+  <label class="pick" for="file">Take or choose a photo of a part</label>
+  <input id="file" type="file" accept="image/*" capture="environment">
+  <img id="preview" alt="Chosen photo">
+
+  <div class="card">
+    <label for="mode"><b>How careful should it be?</b></label>
+    <select id="mode">
+      <option value="balanced">Balanced: answers more often</option>
+      <option value="careful">Careful: answers only when very sure</option>
+      <option value="guess">Best guess: always shows the closest type (may be wrong)</option>
+    </select>
+  </div>
+
+  <button id="go" disabled>Identify the part</button>
+
+  <div id="result" class="card" aria-live="polite">
+    <p id="headline" class="big"></p>
+    <p id="detail" class="sub"></p>
+    <div class="bar"><span id="fill"></span><i id="mark"></i></div>
+    <p class="small">Bar = how similar the photo is to our reference photos. The black line is the level needed to answer.</p>
+    <b>Closest part types</b>
+    <ul id="top"></ul>
+  </div>
+
+  <div class="card brand">
+    <b>Brand: coming soon</b>
+    <p class="sub">Brand recognition needs photos taken in a workshop with the brand visible. This is what we would like to build together with your garage.</p>
+  </div>
+
+  <p class="small">Prototype for research. Photos are processed on this computer and are not stored.</p>
+</main>
+
+<script>
+const file = document.getElementById('file'), go = document.getElementById('go'), preview = document.getElementById('preview');
+const result = document.getElementById('result');
+let chosen = null;
+
+file.addEventListener('change', () => {
+  chosen = file.files[0] || null;
+  go.disabled = !chosen;
+  result.style.display = 'none';
+  if (chosen) { preview.src = URL.createObjectURL(chosen); preview.style.display = 'block'; }
+});
+
+go.addEventListener('click', async () => {
+  if (!chosen) return;
+  go.disabled = true; go.textContent = 'Working...';
+  const form = new FormData(); form.append('file', chosen);
+  try {
+    const r = await fetch('/api/v1/identify-type?mode=' + document.getElementById('mode').value, { method: 'POST', body: form });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Something went wrong');
+    show(d);
+  } catch (e) {
+    show({ error: e.message });
+  } finally {
+    go.disabled = false; go.textContent = 'Identify the part';
+  }
+});
+
+function show(d) {
+  const head = document.getElementById('headline'), detail = document.getElementById('detail');
+  const top = document.getElementById('top'); top.textContent = '';
+  result.style.display = 'block';
+  if (d.error) { head.textContent = 'Could not read the photo'; head.className = 'big warn'; detail.textContent = d.error; return; }
+  if (d.answered && d.mode === 'guess') { head.textContent = 'Best guess: ' + d.type; head.className = 'big warn'; detail.textContent = 'Not confirmed. The system is not asked to refuse in this mode, so check the part.'; }
+  else if (d.answered) { head.textContent = d.type; head.className = 'big ok'; detail.textContent = 'This looks like a ' + d.type + '. Please still check the part.'; }
+  else { head.textContent = "I'm not sure"; head.className = 'big warn'; detail.textContent = 'Not confident enough to name it. Try a clearer photo, or check the closest types below.'; }
+  // the service's blur check flags most photos (even sharp ones), so it is not shown to the user
+  if (d.warning && d.warning.includes('dark')) detail.textContent += ' The photo may be too dark.';
+  else if (d.warning && d.warning.includes('bright')) detail.textContent += ' The photo may be too bright.';
+  const pct = v => Math.max(0, Math.min(100, (v - 0.5) / 0.5 * 100));  // bar shows similarity from 0.5 to 1.0
+  document.getElementById('fill').style.width = pct(d.score) + '%';
+  document.getElementById('mark').style.left = pct(d.threshold) + '%';
+  d.top.forEach(t => { const li = document.createElement('li'); li.textContent = t.type + ' (' + t.score.toFixed(2) + ')'; top.appendChild(li); });
+}
+</script>
+</body>
+</html>
